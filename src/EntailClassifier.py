@@ -62,6 +62,16 @@ class WordEntry:
             self.width=0
         else:
             print "Warning: invalid entry "+fields
+        simdict={} #dictionary to store mapping from word to similarity score
+        rankdict={} #dictionary to store mapping from word to rank in neighbour list
+
+    def addwordtodicts(self,word):
+        self.simdict[word]=-1
+        self.rankdict[word]=-1
+    def addscorestodicts(self,word,sim,rank):
+        if word in self.simdict.keys():
+            self.simdict[word]=sim
+            self.rankdict[word]=rank
 
 
 class EntailClassifier:
@@ -156,13 +166,35 @@ class EntailClassifier:
         print "Size of WordEntry dict is "+str(len(self.entrydict))
         instream.close()
 
+    def loadsims(self,simsfile,use_cache=False,make_cache=False):
+        #is there a relevant cache of relevant sims? If so, load
+        #otherwise first need to establish which word pairs we need to store similarities for using the pairmatrix
+        #then read the simsfile and store the similarities
+        #and write to cache
+
+        if use_cache:
+            self.loadcachedsims()
+        else:
+            for item in self.pairmatrix:
+                print item
+
+
+            if make_cache:
+                self.makesimcache()
+
+    def loadcachedsims(self):
+        return
+
+    def makesimcache(self):
+        return
+
     def traintest(self,method):
         scores={}
 
         scores["accuracy"]=[]
         scores["precision"]=[]
         scores["recall"]=[]
-        scores["fscore"]=[]
+        scores["f1score"]=[]
 
         for split in range(EntailClassifier.cv):
             threshold=self.train1(split,method)
@@ -170,13 +202,18 @@ class EntailClassifier:
             scores["accuracy"].append(acc)
             scores["precision"].append(pre)
             scores["recall"].append(rec)
-            scores["fscore"].append(f)
+            scores["f1score"].append(f)
 
         for score in scores.keys():
             (mean,sd,int)=mymean(scores[score],EntailClassifier.k)
             print "Results for "+method+" are "+score+": mean= "+str(mean)+" sd= "+str(sd)+" interval= +-"+str(int)
+            if score=="precision":
+                premean=mean
+            if score=="recall":
+                recmean=mean
 
-
+        f=2*premean*recmean/(premean+recmean)
+        print "F1 of average precision and average recall is "+str(f)
 
     def train1(self,split,method):
         #method to test classification method in one split of data
@@ -292,8 +329,17 @@ if __name__ == "__main__":
 
     myEntClassifier=EntailClassifier(parameters["pairfile"],parameters["freqfile"])
     #myEntClassifier.test1(0,"freq",[0])
-    myEntClassifier.traintest("freq")
-    myEntClassifier.traintest("zero_freq")
+
+    if "lin_freq" in parameters["methods"]:
+        #need to load up thesaurus similarity file
+        #probably want to cache the relevant similarity scores
+        myEntClassifier.loadsims(parameters["simsfile"],parameters["use_cache"])
+
+
+
+    for method in parameters["methods"]:
+        myEntClassifier.traintest(method)
+
 
     endtime=time.time()
     print "Finished at "+datetime.datetime.fromtimestamp(endtime).strftime('%Y-%m-%d %H:%M:%S')

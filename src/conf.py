@@ -8,6 +8,9 @@ def configure(arguments):
     parameters["at_home"]=False
     parameters["pairset"]="wn-noun-dependencies.json"
     parameters["freqset"]="entries_t2.strings"
+    parameters["methods"]=[]
+    parameters["use_cache"]=False
+    parameters["simset"]="neighbours_t2.strings"
 
     for arg in arguments:
         if arg=="at_home":
@@ -16,6 +19,14 @@ def configure(arguments):
             parameters["local"]=True
         elif arg=="on_apollo":
             parameters["on_apollo"]=True
+        elif arg=="zero_freq":
+            parameters["methods"].append("zero_freq")
+        elif arg=="freq":
+            parameters["methods"].append("freq")
+        elif arg=="lin_freq":
+            parameters["methods"].append("lin_freq")
+        elif arg=="use_cache":
+            parameters["use_cache"]=True
 
     parameters=setfiles(parameters)
     return parameters
@@ -28,4 +39,5 @@ def setfiles(parameters):
 
     parameters["pairfile"]=parameters["datadir"]+parameters["pairset"]
     parameters["freqfile"]=parameters["datadir"]+parameters["freqset"]
+    parameters["simfile"]=parameters["datadir"]+parameters["simset"]
     return parameters
