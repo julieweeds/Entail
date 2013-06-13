@@ -3,6 +3,7 @@ __author__ = 'Julie'
 
 import json, random,numpy,conf,sys,re,math
 from sep import Separator
+import time,datetime
 
 wordposPATT=re.compile('(.*)/(.*)')
 
@@ -32,7 +33,7 @@ def mymean(list,k):
     n=0
     total=0
     totalsquare=0
-    print list
+    #print list
     for item in list:
         n+=1
         total+=float(item)
@@ -156,12 +157,24 @@ class EntailClassifier:
         instream.close()
 
     def traintest(self,method):
-        accuracy=[]
+        scores={}
+
+        scores["accuracy"]=[]
+        scores["precision"]=[]
+        scores["recall"]=[]
+        scores["fscore"]=[]
+
         for split in range(EntailClassifier.cv):
             threshold=self.train1(split,method)
-            accuracy.append(self.test1(split,method,[threshold]))
-        (mean,sd,int)=mymean(accuracy,EntailClassifier.k)
-        print "Results for "+method+" are mean: "+str(mean)+" sd: "+str(sd)+" interval: +-"+str(int)
+            (acc,pre,rec,f)=self.test1(split,method,[threshold])
+            scores["accuracy"].append(acc)
+            scores["precision"].append(pre)
+            scores["recall"].append(rec)
+            scores["fscore"].append(f)
+
+        for score in scores.keys():
+            (mean,sd,int)=mymean(scores[score],EntailClassifier.k)
+            print "Results for "+method+" are "+score+": mean= "+str(mean)+" sd= "+str(sd)+" interval= +-"+str(int)
 
 
 
@@ -170,8 +183,9 @@ class EntailClassifier:
 
         if method=="freq":
             return self.trainFreqThresh1(split)
-        if method=="zero_freq":
+        elif method=="zero_freq":
             return self.train0Freq1(split)
+
         else:
             print "Error: Unknown method of classification "+method
             exit(1)
@@ -199,7 +213,7 @@ class EntailClassifier:
                 print "Trained on "+str(done)
         print len(positives),len(negatives)
 
-        threshold = Separator.separate(positives,negatives,trials=100000)
+        threshold = Separator.separate(positives,negatives,trials=1000000)
         return threshold
 
 
@@ -210,9 +224,10 @@ class EntailClassifier:
     def test1(self,split,method,args):
         #method to test classification method in one split of data
 
-        if method=="freq":
+        if method=="freq" or "zero_freq":
             threshold=float(args.pop())
             return self.testFreqThresh1(split,threshold)
+
         else:
             print "Error: Unknown method of classification "+method
             exit(1)
@@ -267,11 +282,22 @@ class EntailClassifier:
         print "Correct: "+str(correct)+" Wrong: "+str(wrong)+" Total: "+str(total)+" Accuracy: "+str(accuracy)
         print "TP: "+str(TP)+" TN: "+str(TN)+" FP: "+str(FP)+" FN: "+str(FN)
         print "Precision: "+str(p)+" Recall: "+str(r)+" F: "+str(f)
-        return accuracy
+        return (accuracy,p,r,f)
 
 
 if __name__ == "__main__":
     parameters=conf.configure(sys.argv)
+    starttime=time.time()
+    print "Started at "+datetime.datetime.fromtimestamp(starttime).strftime('%Y-%m-%d %H:%M:%S')
+
     myEntClassifier=EntailClassifier(parameters["pairfile"],parameters["freqfile"])
     #myEntClassifier.test1(0,"freq",[0])
     myEntClassifier.traintest("freq")
+    myEntClassifier.traintest("zero_freq")
+
+    endtime=time.time()
+    print "Finished at "+datetime.datetime.fromtimestamp(endtime).strftime('%Y-%m-%d %H:%M:%S')
+    elapsed = endtime-starttime
+    hourselapsed=int(elapsed/3600)
+    minselapsed=int((elapsed-hourselapsed*3600)/60)
+    print "Time taken is "+str(hourselapsed)+" hours and "+str(minselapsed)+" minutes."
