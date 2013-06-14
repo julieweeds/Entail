@@ -39,5 +39,5 @@ def setfiles(parameters):
 
     parameters["pairfile"]=parameters["datadir"]+parameters["pairset"]
     parameters["freqfile"]=parameters["datadir"]+parameters["freqset"]
-    parameters["simfile"]=parameters["datadir"]+parameters["simset"]
+    parameters["simsfile"]=parameters["datadir"]+parameters["simset"]
     return parameters
