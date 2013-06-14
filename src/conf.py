@@ -11,6 +11,7 @@ def configure(arguments):
     parameters["methods"]=[]
     parameters["use_cache"]=False
     parameters["simset"]="neighbours_t2.strings"
+    parameters["vectorset"]="events_t2.strings"
 
     for arg in arguments:
         if arg=="at_home":
@@ -25,6 +26,8 @@ def configure(arguments):
             parameters["methods"].append("freq")
         elif arg=="lin_freq":
             parameters["methods"].append("lin_freq")
+        elif arg=="CR":
+            parameters["methods"].append("CR")
         elif arg=="use_cache":
             parameters["use_cache"]=True
 
@@ -40,4 +43,5 @@ def setfiles(parameters):
     parameters["pairfile"]=parameters["datadir"]+parameters["pairset"]
     parameters["freqfile"]=parameters["datadir"]+parameters["freqset"]
     parameters["simsfile"]=parameters["datadir"]+parameters["simset"]
+    parameters["vectorfile"]=parameters["datadir"]+parameters["vectorset"]
     return parameters

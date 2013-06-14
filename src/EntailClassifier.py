@@ -1,96 +1,11 @@
 __author__ = 'Julie'
 
 
-import json, random,numpy,conf,sys,re,math
+import json, random,numpy,conf,sys
 from sep import Separator
 import time,datetime
-
-wordposPATT=re.compile('(.*)/(.*)')
-
-def untag(wordpos):
-
-    matchobj=wordposPATT.match(wordpos)
-    if matchobj:
-        (word,pos)=(matchobj.group(1),matchobj.group(2))
-        return (word,pos)
-    else:
-        print "Warning: Does not match word/pos pattern: "+wordpos
-        return ("","")
-
-def fscore(TP,FP,FN):
-    if TP+FP==0:
-        precision = 1
-    else:
-        precision = float(TP)/(float(TP)+float(FP))
-    if TP+FN==0:
-        recall = 1
-    else:
-        recall=float(TP)/(float(TP)+float(FN))
-    f = 2*precision*recall/(precision+recall)
-    return(precision,recall,f)
-
-def mymean(list,k):
-    n=0
-    total=0
-    totalsquare=0
-    #print list
-    for item in list:
-        n+=1
-        total+=float(item)
-        totalsquare+=float(item)*float(item)
-
-    mean = total/n
-    var = totalsquare/n - mean*mean
-    if var<0:
-        print "Warning: negative variance "+str(var)
-        var=0
-    sd = math.pow(var,0.5)
-    int = k*sd/math.pow(len(list),0.5)
-    return (mean,sd,int)
-
-
-class WordEntry:
-
-    def __init__(self,fields):
-        if len(fields)==3:
-            (self.word,self.pos)=untag(fields[0])
-            self.freq=fields[1]
-            self.width=fields[2]
-        elif len(fields)==2:
-            (self.word,self.pos)=untag(fields[0])
-            self.freq=fields[1]
-            self.width=0
-        else:
-            print "Warning: invalid entry "+fields
-        self.simdict={} #dictionary to store mapping from word to similarity score
-        self.rankdict={} #dictionary to store mapping from word to rank in neighbour list
-
-    def addwordtodicts(self,word):
-        self.simdict[word]=0
-        self.rankdict[word]=float("inf")
-    def addscorestodicts(self,word,sim,rank):
-        if word in self.simdict.keys():
-            self.simdict[word]=sim
-            self.rankdict[word]=rank
-            return 1
-        else:
-            return 0
-
-    def writecache(self,outstream):
-        if len(self.simdict.keys())>0:
-            outstream.write(self.word)
-            for w2 in self.simdict.keys():
-                outstream.write("\t"+w2+"\t"+str(self.simdict[w2])+"\t"+str(self.rankdict[w2]))
-            outstream.write("\n")
-
-    def readfromcache(self,w2,sc,rank):
-        self.simdict[w2]=sc
-        self.rankdict[w2]=rank
-        if sc>0:
-            return 1
-        else:
-            return 0
-
+from wordEntry import WordEntry
+from bitsbobs import untag, mymean,fscore
 
 class EntailClassifier:
     cv=5  #number of cross-validation splits
@@ -266,6 +181,49 @@ class EntailClassifier:
         outstream.close()
         return
 
+    def loadvectors(self,vectorfile,use_cache=False,make_cache=True):
+        self.vectorfile=vectorfile
+        if use_cache:
+            #self.loadvectorcache()
+            self.vectorfile=self.vectorfile+".cached"
+            make_cache=False
+
+        for[w1,w2,_r] in self.pairmatrix:
+            self.entrydict[w1].paircount+=1
+            self.entrydict[w2].paircount+=1
+
+        instream=open(self.vectorfile,'r')
+        print "Reading "+self.vectorfile
+        linesread=0
+        lineswritten=0
+        if make_cache:
+            outstream=open(self.vectorfile+".cached",'w')
+            print "Writing "+self.vectorfile+".cached"
+        for line in instream:
+            linesread+=1
+            line.rstrip()
+            fields=line.split('\t')
+            fields.reverse()
+            (w1,_)=untag(fields.pop())
+            if w1 != "" and self.entrydict[w1].paircount>0:
+                #store this vector
+                if make_cache:
+                    outstream.write(line)
+                    lineswritten+=1
+                while len(fields)>0:
+                    w2=fields.pop()
+                    sc=float(fields.pop())
+                    self.entrydict[w1].addfeature(w2,sc)
+            if linesread%1000==0:
+                print "Read "+str(linesread)+" lines and written "+str(lineswritten)+" lines"
+
+        if make_cache:
+            outstream.close()
+            print "Written "+str(lineswritten)+" lines"
+        instream.close()
+        print "Read "+str(linesread)+" lines"
+
+
     def traintest(self,method):
         scores={}
 
@@ -302,6 +260,10 @@ class EntailClassifier:
             return self.train0Freq1(split)
         elif method=="lin_freq":
             return self.trainlinfreq(split)
+        elif method=="CR":
+            return self.trainCR(split)
+        elif method=="CR_thresh":
+            return self.trainCRThresh(split)
         else:
             print "Error: Unknown method of classification "+method
             exit(1)
@@ -325,17 +287,48 @@ class EntailClassifier:
             else:
                 negatives.append(diff)
             done+=1
-            if done%100==0:
+            if done%1000==0:
                 print "Trained on "+str(done)
         print len(positives),len(negatives)
 
         threshold = Separator.separate(positives,negatives,trials=1000000)
         return [threshold]
 
+    def trainCR(self,split):
+        return [1]
 
     def train0Freq1(self,split):
         #dummy to return freq threshold of 0
         return [0]
+
+    def trainCRThresh(self,split):
+
+        print"Training split "+str(split)
+        positives=[]
+        negatives=[]
+        done=0
+        for [word1,word2,result] in self.pairmatrix[self.cv_idx!=split]:
+
+            #diff = float(self.entrydict[word2].freq)-float(self.entrydict[word1].freq)
+            precision = float(self.entrydict[word1].precision(self.entrydict[word2]))
+            recall=float(self.entrydict[word2].precision(self.entrydict[word1]))
+            if recall == 0:
+                ratio=0
+                #hm=0
+            else:
+                ratio=precision/recall
+                #hm=2*precision*recall/(precision+recall)
+            if int(result)==1:
+                positives.append(ratio)
+            else:
+                negatives.append(ratio)
+            done+=1
+            if done%1000==0:
+                print "Trained on "+str(done)
+        print len(positives),len(negatives)
+
+        threshold = Separator.separate(positives,negatives,trials=1000000,integer=False)
+        return [threshold]
 
     def trainlinfreq(self,split):
         return [100,float("-inf")]
@@ -343,130 +336,115 @@ class EntailClassifier:
     def test1(self,split,method,args):
         #method to test classification method in one split of data
         # method
+        if method=="lin_freq":
+            (freqthresh,kthresh)=(args[1],args[0])
+            print "Testing thresholds k= "+str(kthresh)+" and freq2-freq1 > "+str(freqthresh)+" on split "+str(split)
+        else:
+            [threshold]=args
+            print "Testing threshold "+str(threshold)+" on split "+str(split)
+
+        correct=0
+        wrong=0
+        total=0
+        TP=0
+        TN=0
+        FP=0
+        FN=0
+        for [word1,word2,result] in self.pairmatrix[self.cv_idx==split]:
+            #print word1,word2,result
+            #if word1 in self.entrydict.keys():
+            #    if word2 in self.entrydict.keys():
+            predict = self.predict(method,word1,word2,args)
+
+            if int(predict)==int(result):
+                correct+=1
+                if predict==1:
+                    TP+=1
+                else:
+                    TN+=1
+            else:
+                wrong+=1
+                if predict==1:
+                    FP+=1
+                else:
+                    FN+=1
+            total+=1
+            if total%100==0:
+                print "Completed "+str(total)+" tests"
+
+        accuracy = float(correct)/float(total)
+        (p,r,f)=fscore(TP,FP,FN)
+        print "Correct: "+str(correct)+" Wrong: "+str(wrong)+" Total: "+str(total)+" Accuracy: "+str(accuracy)
+        print "TP: "+str(TP)+" TN: "+str(TN)+" FP: "+str(FP)+" FN: "+str(FN)
+        print "Precision: "+str(p)+" Recall: "+str(r)+" F: "+str(f)
+        return (accuracy,p,r,f)
+
+    def predict(self,method,word1,word2,args):
         if method=="freq" or method=="zero_freq":
-            threshold=float(args.pop())
-            #print threshold
-            return self.testFreqThresh1(split,threshold)
+            return self.freqpredict(word1,word2,args)
         elif method=="lin_freq" or method=="lin_freq_thresh":
-            (freqthresh,kthresh)=(float(args.pop()),float(args.pop()))
+            return self.linpredict(word1,word2,args)
             #print "Thresholds ",kthresh,freqthresh
-            return self.testlinfreq(split,kthresh,freqthresh)
+        elif method=="CR" or method=="CR_thresh":
+            return self.CRpredict(word1,word2,args)
 
         else:
             print "Error: Unknown method of classification "+method
             exit(1)
 
-    def testFreqThresh1(self,split,threshold):
-        #method to test frequency threshold in one cross-val split of data
-        #split is the cv split to test in
-        #threshold is the frequency threshold to test
-        print "Testing threshold "+str(threshold)+" on split "+str(split)
-
-        correct=0
-        wrong=0
-        total=0
-        TP=0
-        TN=0
-        FP=0
-        FN=0
-        for [word1,word2,result] in self.pairmatrix[self.cv_idx==split]:
-            #print word1,word2,result
-            diff=threshold
-            #if word1 in self.entrydict.keys():
-            #    if word2 in self.entrydict.keys():
-            diff = float(self.entrydict[word2].freq)-float(self.entrydict[word1].freq)
+    def linpredict(self,word1,word2,args):
+        (freqthresh,kthresh)=(args[1],args[0])
+        rank1=self.entrydict[word1].rankdict[word2]
+        rank2=self.entrydict[word2].rankdict[word1]
+        diff = float(self.entrydict[word2].freq)-float(self.entrydict[word1].freq)
 
 
-            #    else:
-            #        print "Error: no frequency information for "+word2
-            #else:
-            #    print "Error: no frequency information for "+word1
-            if diff>threshold:
+        #    else:
+        #        print "Error: no frequency information for "+word2
+        #else:
+        #    print "Error: no frequency information for "+word1
+        if rank1 <= kthresh or rank2 <= kthresh:
+            if diff>freqthresh:
                 predict=1
             else:
                 predict=0
-            #print word1,word2,diff,predict,result
-            if int(predict)==int(result):
-                correct+=1
-                if predict==1:
-                    TP+=1
-                else:
-                    TN+=1
-            else:
-                wrong+=1
-                if predict==1:
-                    FP+=1
-                else:
-                    FN+=1
-            total+=1
-            #if total%10==0:
-             #   break
-        accuracy = float(correct)/float(total)
-        (p,r,f)=fscore(TP,FP,FN)
-        print "Correct: "+str(correct)+" Wrong: "+str(wrong)+" Total: "+str(total)+" Accuracy: "+str(accuracy)
-        print "TP: "+str(TP)+" TN: "+str(TN)+" FP: "+str(FP)+" FN: "+str(FN)
-        print "Precision: "+str(p)+" Recall: "+str(r)+" F: "+str(f)
-        return (accuracy,p,r,f)
+                #print word1,word2,diff,predict,result
+        else:
+            predict =0
+        return predict
+
+    def freqpredict(self,word1,word2,args):
+        [threshold]=args
+        diff = float(self.entrydict[word2].freq)-float(self.entrydict[word1].freq)
 
 
-    def testlinfreq(self,split,kthresh,freqthresh):
-        #method to test frequency threshold in one cross-val split of data
-        #split is the cv split to test in
-        #threshold is the frequency threshold to test
-        print "Testing thresholds k= "+str(kthresh)+" and freq2-freq1 > "+str(freqthresh)+" on split "+str(split)
+        #    else:
+        #        print "Error: no frequency information for "+word2
+        #else:
+        #    print "Error: no frequency information for "+word1
+        if diff>threshold:
+            predict=1
+        else:
+            predict=0
+        return predict
 
-        correct=0
-        wrong=0
-        total=0
-        TP=0
-        TN=0
-        FP=0
-        FN=0
-        for [word1,word2,result] in self.pairmatrix[self.cv_idx==split]:
-            #print word1,word2,result
-            diff=freqthresh
-            #if word1 in self.entrydict.keys():
-            #    if word2 in self.entrydict.keys():
+    def CRpredict(self,word1,word2,args):
+        [threshold]=args
 
-            rank1=self.entrydict[word1].rankdict[word2]
-            rank2=self.entrydict[word2].rankdict[word1]
-            diff = float(self.entrydict[word2].freq)-float(self.entrydict[word1].freq)
-
-
-            #    else:
-            #        print "Error: no frequency information for "+word2
-            #else:
-            #    print "Error: no frequency information for "+word1
-            if rank1 <= kthresh or rank2 <= kthresh:
-                if diff>freqthresh:
-                    predict=1
-                else:
-                    predict=0
-                    #print word1,word2,diff,predict,result
-            else:
-                predict =0
-            if int(predict)==int(result):
-                correct+=1
-                if predict==1:
-                    TP+=1
-                else:
-                    TN+=1
-            else:
-                wrong+=1
-                if predict==1:
-                    FP+=1
-                else:
-                    FN+=1
-            total+=1
-            #if total%10==0:
-            #   break
-        accuracy = float(correct)/float(total)
-        (p,r,f)=fscore(TP,FP,FN)
-        print "Correct: "+str(correct)+" Wrong: "+str(wrong)+" Total: "+str(total)+" Accuracy: "+str(accuracy)
-        print "TP: "+str(TP)+" TN: "+str(TN)+" FP: "+str(FP)+" FN: "+str(FN)
-        print "Precision: "+str(p)+" Recall: "+str(r)+" F: "+str(f)
-        return (accuracy,p,r,f)
-
+        precision = float(self.entrydict[word1].precision(self.entrydict[word2]))
+        recall=float(self.entrydict[word2].precision(self.entrydict[word1]))
+        if recall == 0:
+            ratio=0
+            hm=0
+        else:
+            ratio=precision/recall
+            hm=2*precision*recall/(precision+recall)
+        #print word1,word2,precision,recall,hm,ratio
+        if ratio>threshold:
+            predict =1
+        else:
+            predict =0
+        return predict
 
 if __name__ == "__main__":
     parameters=conf.configure(sys.argv)
@@ -483,6 +461,9 @@ if __name__ == "__main__":
         myEntClassifier.loadsims(parameters["simsfile"],parameters["use_cache"])
         #print myEntClassifier.entrydict["ambulance"].simdict
         #print myEntClassifier.entrydict["ambulance"].rankdict
+
+    if "CR" in parameters["methods"]:
+        myEntClassifier.loadvectors(parameters["vectorfile"],parameters["use_cache"])
 
 
     for method in parameters["methods"]:

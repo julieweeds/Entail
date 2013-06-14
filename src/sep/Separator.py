@@ -5,7 +5,7 @@ __author__ = 'juliewe'
 
 import bisect
 
-def separate(positives,negatives,trials=100):
+def separate(positives,negatives,trials=100,integer=True):
 
     res=0
     positives.sort()
@@ -25,8 +25,9 @@ def separate(positives,negatives,trials=100):
         res= (leastpositive+mostnegative)/2
         bestwrong=0
     else:
-        stepsize=(mostnegative-leastpositive)/(trials-1)
-        if stepsize<1: stepsize=1
+        stepsize=float(mostnegative-leastpositive)/float(trials-1)
+        if integer:
+            if stepsize<1: stepsize=1
         #print stepsize
 
         thistrial=leastpositive
