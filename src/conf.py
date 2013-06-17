@@ -39,6 +39,8 @@ def setfiles(parameters):
         parameters["datadir"]="C:/Users/Julie/Documents/Github/Entail/data/"
     if parameters["local"]:
         parameters["datadir"]="/Volumes/LocalScratchHD/juliewe/Documents/workspace/Entail/data/"
+    if parameters["on_apollo"]:
+        parameters["datadir"]="/mnt/lustre/scratch/inf/juliewe/Entail/data/"
 
     parameters["pairfile"]=parameters["datadir"]+parameters["pairset"]
     parameters["freqfile"]=parameters["datadir"]+parameters["freqset"]
