@@ -19,7 +19,7 @@ def separate(positives,negatives,trials=100,integer=True):
     else:
         mostnegative=0
 
-    print "Threshold range is "+str(leastpositive)+" to "+str(mostnegative)
+#    print "Threshold range is "+str(leastpositive)+" to "+str(mostnegative)
 
     if leastpositive>=mostnegative:
         res= (leastpositive+mostnegative)/2

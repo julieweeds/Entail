@@ -44,3 +44,49 @@ def mymean(list,k):
     sd = math.pow(var,0.5)
     int = k*sd/math.pow(len(list),0.5)
     return (mean,sd,int)
+
+def f_analyse(actual,results):
+    #return acc,p,r,f for 2 lists
+
+    TP=0
+    TN=0
+    FP=0
+    FN=0
+
+    #check lengths the same
+    if len(actual)!=len(results):
+        print "Error: two lists not of same length: "+str(len(actual))+", "+str(len(results))
+
+    test=0
+    while len(actual)>0:
+        test+=1
+        thisactual=actual.pop()
+        thisresult=results.pop()
+
+        if thisactual==1:
+            if thisresult==1:
+                TP+=1
+            else:
+                FN+=1
+        else:
+            if thisresult==1:
+                FP+=1
+            else:
+                TN+=1
+
+    total=TP+FP+TN+FN
+    if total!=test:
+        print "Error: number of tests was "+str(test)+" but total is "+str(total)
+    acc=float(TP+TN)/float(total)
+    pre=float(TP)/float(TP+FP)
+    rec=float(TP)/float(TP+FN)
+    f=2*pre*rec/(pre+rec)
+    return (acc,pre,rec,f)
+
+
+if __name__ =="__main__":
+
+    a1=[1,1,1,1,0,0,0,0]
+    r1=[1,1,0,0,1,1,0,0]
+
+    print f_analyse(a1,r1)

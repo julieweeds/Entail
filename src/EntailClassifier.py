@@ -5,7 +5,8 @@ import json, random,numpy,conf,sys
 from sep import Separator
 import time,datetime
 from wordEntry import WordEntry
-from bitsbobs import untag, mymean,fscore
+from bitsbobs import untag, mymean,fscore, f_analyse
+#from sklearn import svm
 
 class EntailClassifier:
     cv=5  #number of cross-validation splits
@@ -233,8 +234,11 @@ class EntailClassifier:
         scores["f1score"]=[]
 
         for split in range(EntailClassifier.cv):
-            parameters=self.train1(split,method)
-            (acc,pre,rec,f)=self.test1(split,method,parameters)
+            if method=="CR_svm":
+                (acc,pre,rec,f)=self.svm_train(split,"CR")
+            else:
+                parameters=self.train1(split,method)
+                (acc,pre,rec,f)=self.test1(split,method,parameters)
             scores["accuracy"].append(acc)
             scores["precision"].append(pre)
             scores["recall"].append(rec)
@@ -445,6 +449,50 @@ class EntailClassifier:
         else:
             predict =0
         return predict
+
+    def svm_train(self,split,method):
+        #generate positives and negatives for SVM
+        X=[] #training points
+        y=[] #classification of training points
+        for [word1,word2,result] in self.pairmatrix[self.cv_idx!=split]:
+            X.append(self.transform(word1,word2,method))
+            y.append(result)
+
+        #generate testpairs for SVM
+        testpoints=[]
+        actual=[]
+        for [word1,word2,result] in self.pairmatrix[self.cv_idx==split]:
+            testpoints.append(self.transform(word1,word2,method))
+            actual.append(result)
+
+        #build SVM
+        print "Built training-test split "+str(split)+" ... building SVM"
+        clf = svm.SVC()
+        clf.fit(X,y)
+        print "Built SVM"
+
+        results=clf.predict(testpoints)
+        #compare results against actual
+        return f_analyse(actual,results)
+
+    def transform(self,word1,word2,method):
+        if method =="CR":
+            return self.transform_CR(word1,word2)
+        else:
+            print "No such transformation method "+method
+
+    def transform_CR(self,word1,word2):
+        #return a vector of the recall precision comparison of two words for svm
+
+        precision = float(self.entrydict[word1].precision(self.entrydict[word2]))
+        recall=float(self.entrydict[word2].precision(self.entrydict[word1]))
+        if recall==0:
+            ratio=0
+            hm=0
+        else:
+            ratio=precision/recall
+            hm=2*precision*recall/(precision+recall)
+        return [ratio,hm]
 
 if __name__ == "__main__":
     parameters=conf.configure(sys.argv)
