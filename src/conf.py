@@ -11,15 +11,22 @@ def configure(arguments):
     parameters["methods"]=[]
     parameters["use_cache"]=False
     parameters["simset"]="neighbours_t2.strings"
-    parameters["vectorset"]="events_t2.strings"
+    #parameters["vectorset"]="events_t2.strings"
+    parameters["vectorset"]="events_t10.pmi.strings"
 
     for arg in arguments:
         if arg=="at_home":
             parameters["at_home"]=True
+            parameters["on_apollo"]=False
+            parameters["local"]=False
         elif arg=="local":
             parameters["local"]=True
+            parameters["on_apollo"]=False
+            parameters["at_home"]=False
         elif arg=="on_apollo":
             parameters["on_apollo"]=True
+            parameters["at_home"]=False
+            parameters["local"]=False
         elif arg=="zero_freq":
             parameters["methods"].append("zero_freq")
         elif arg=="freq":

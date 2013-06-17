@@ -201,7 +201,7 @@ class EntailClassifier:
             print "Writing "+self.vectorfile+".cached"
         for line in instream:
             linesread+=1
-            line.rstrip()
+            line=line.rstrip()
             fields=line.split('\t')
             fields.reverse()
             (w1,_)=untag(fields.pop())
