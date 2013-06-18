@@ -12,12 +12,15 @@ class EntailClassifier:
     cv=5  #number of cross-validation splits
     randomseed=42   #for cross-validation
     k=1.96 #for 95% confidence interval
+    kneighs=1000
 
 
-    def __init__(self,pairfilename,freqfilename):
+    def __init__(self,pairfilename,freqfilename,use_cache=False):
 
         self.pairfile=pairfilename
         self.freqfile=freqfilename
+        self.use_cache=use_cache
+        self.paircache=True #use cache of pairs
         self.simsfile=""
         self.pairmatrix = "" #will be numpy array which stores triple of w1,w1,1/0
         self.cv_idx= "" #will be index which indicates which split item in self.pairmatrix is in
@@ -30,6 +33,8 @@ class EntailClassifier:
 
     def readpairs(self):
 
+        if self.paircache:
+            self.pairfile=self.pairfile+'.cached'
         print "Reading "+self.pairfile
         json_data = open(self.pairfile)
         data = json.load(json_data)
@@ -64,11 +69,11 @@ class EntailClassifier:
             self.nopairs+=1
             if len(item)==3:
                 lengthcheck+=1
-                if item[2]==1:
+                if int(item[2])==1:
                     ones+=1
-                elif item[2]==0:
+                elif int(item[2])==0:
                     zeros+=1
-
+        #print data[0]
         #print self.nopairs,lengthcheck,ones,zeros
         if lengthcheck != self.nopairs:
             print "Warning Data error: number of pairs is "+str(self.nopairs)
@@ -80,6 +85,38 @@ class EntailClassifier:
             print "Number of zeros is "+str(zeros)
             exit(1)
         print "Validated data:  "+str(self.nopairs)+" pairs"
+
+    def filter_pairs(self):
+        #remove any pairs for which we don't have frequency/corpus information
+        incount=0
+        totalcount=0
+        outcount=0
+        todelete=[]
+        print "Checking pairmatrix against frequency information"
+        for i in range(len(self.pairmatrix)):
+            [word1,word2,_]=self.pairmatrix[i]
+            #print (word1,word2)
+            #print self.entrydict.keys()
+            if word1 in self.entrydict.keys() and word2 in self.entrydict.keys():
+                incount+=1
+            else:
+                outcount+=1
+                #save index in todelete list
+                todelete.append(i)
+            totalcount+=1
+            if totalcount%1000==0:
+                print "Checked "+str(totalcount)+" in = "+str(incount)+" out = "+str(outcount)
+
+
+        print "Checked frequency information for "+str(totalcount)+" pairs: kept "+str(incount)+" and discarding "+str(outcount)+" ("+str(float(outcount)/float(totalcount))+")"
+        self.pairmatrix=numpy.delete(self.pairmatrix,todelete,0)
+        self.nopairs=len(self.pairmatrix)
+        print "Size of pairmatrix is now "+str(self.nopairs)
+        #print self.pairmatrix[0]
+        if outcount>0:
+            print "Writing cache "+self.pairfile+".cached"
+            with open(self.pairfile+".cached",'w') as outfile:
+                json.dump(self.pairmatrix.tolist(),outfile)
 
     def readtotals(self):
 
@@ -100,6 +137,8 @@ class EntailClassifier:
         print "Read "+str(linesread)+" lines"
         print "Size of WordEntry dict is "+str(len(self.entrydict))
         instream.close()
+        if not self.paircache:
+            self.filter_pairs()
 
     def loadsims(self,simsfile,use_cache=False,make_cache=True):
         #is there a relevant cache of relevant sims? If so, load
@@ -126,6 +165,7 @@ class EntailClassifier:
                 fields=line.split('\t')
                 fields.reverse()
                 (w1,_)=untag(fields.pop())
+                #print w1
                 if len(self.entrydict[w1].simdict)>0:
                     #don't care about sims for words not in evaluation
                     rank=1
@@ -299,7 +339,7 @@ class EntailClassifier:
         return [threshold]
 
     def trainCR(self,split):
-        return [1]
+        return [0]
 
     def train0Freq1(self,split):
         #dummy to return freq threshold of 0
@@ -320,7 +360,7 @@ class EntailClassifier:
                 ratio=0
                 #hm=0
             else:
-                ratio=precision/recall
+                ratio=precision-recall
                 #hm=2*precision*recall/(precision+recall)
             if int(result)==1:
                 positives.append(ratio)
@@ -335,7 +375,7 @@ class EntailClassifier:
         return [threshold]
 
     def trainlinfreq(self,split):
-        return [100,float("-inf")]
+        return [EntailClassifier.kneighs,float("-inf")]
 
     def test1(self,split,method,args):
         #method to test classification method in one split of data
@@ -441,7 +481,7 @@ class EntailClassifier:
             ratio=0
             hm=0
         else:
-            ratio=precision/recall
+            ratio=precision-recall
             hm=2*precision*recall/(precision+recall)
         #print word1,word2,precision,recall,hm,ratio
         if ratio>threshold:
@@ -500,7 +540,8 @@ if __name__ == "__main__":
     print "Started at "+datetime.datetime.fromtimestamp(starttime).strftime('%Y-%m-%d %H:%M:%S')
     #print parameters
 
-    myEntClassifier=EntailClassifier(parameters["pairfile"],parameters["freqfile"])
+    myEntClassifier=EntailClassifier(parameters["pairfile"],parameters["freqfile"],parameters["use_cache"])
+
     #myEntClassifier.test1(0,"freq",[0])
 
     if "lin_freq" in parameters["methods"]:
@@ -510,7 +551,7 @@ if __name__ == "__main__":
         #print myEntClassifier.entrydict["ambulance"].simdict
         #print myEntClassifier.entrydict["ambulance"].rankdict
 
-    if "CR" in parameters["methods"]:
+    if "CR" in parameters["methods"] or "CR_thresh" in parameters["methods"]:
         myEntClassifier.loadvectors(parameters["vectorfile"],parameters["use_cache"])
 
 

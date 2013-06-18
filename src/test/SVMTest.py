@@ -17,9 +17,12 @@ class SVMTest(unittest.TestCase):
         negatives=[[3,1],[-4,-5],[10,-1]]
         positives=[[3,6],[-1,0],[2,3]]
 
-        testpair=[0,2]
-        results = MySVM.train_test(positives,negatives,[testpair])
-        self.assertGreater(results.pop(),0)
+        testpairs=[[3,1],[3,6],[3,2],[3,4],[3,2.2],[3,3.5]]
+        testanswers=[0,1,0,1,0,1]
+        results = MySVM.train_test(positives,negatives,testpairs)
+        for i in range(len(testpairs)):
+            print "Test "+str(i)+" : "+str(testanswers[i])+" : "+str(results[i])
+            self.assertEqual(results[i],testanswers[i])
 
    # def test_level2(self):
    #     negatives = [-8,-5,-3,2,21]

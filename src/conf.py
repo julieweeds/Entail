@@ -7,10 +7,10 @@ def configure(arguments):
     parameters["local"]=False
     parameters["at_home"]=False
     parameters["pairset"]="wn-noun-dependencies.json"
-    parameters["freqset"]="entries_t2.strings"
+    parameters["freqset"]="entries_t10.strings"
     parameters["methods"]=[]
     parameters["use_cache"]=False
-    parameters["simset"]="neighbours_t2.strings"
+    parameters["simset"]="neighbours_t10.strings"
     #parameters["vectorset"]="events_t2.strings"
     parameters["vectorset"]="events_t10.pmi.strings"
 
@@ -35,6 +35,8 @@ def configure(arguments):
             parameters["methods"].append("lin_freq")
         elif arg=="CR":
             parameters["methods"].append("CR")
+        elif arg=="CR_thresh":
+            parameters["methods"].append("CR_thresh")
         elif arg=="use_cache":
             parameters["use_cache"]=True
 
