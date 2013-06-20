@@ -1,6 +1,7 @@
 __author__ = 'Julie'
 
 from bitsbobs import untag
+import math
 
 class WordEntry:
 
@@ -19,7 +20,9 @@ class WordEntry:
         self.rankdict={} #dictionary to store mapping from word to rank in neighbour list
         self.paircount=0 #number of evaluation pairs involved in
         self.featdict={} #dict of features and scores
-        self.precisiondict={}
+        self.precisiondict={} #to store values of WeedsPrecision
+        self.min_precisiondict={} #to store values of ClarkeDE
+        self.invCLdict={} #to store values of invCL (lenci)
 
     def addwordtodicts(self,word):
         self.simdict[word]=0
@@ -74,3 +77,38 @@ class WordEntry:
                 pre = float(num)/float(den)
             self.precisiondict[word]=pre
             return pre
+
+    def min_precision(self,word):
+        #calculate precision of retrieval of word's features by self
+        #i.e., for each feature in self, is it in word?
+        #difference weighted model (token-based or mi based depending on vector file) as used by Clarke
+        #for recall, call word.precision(self)
+        if word in self.min_precisiondict.keys():
+            return self.min_precisiondict[word]
+        else:
+            if len(self.featdict.keys())==0 or len(word.featdict.keys())==0:
+                print "Warning: zero vectors"
+                pre=0
+            else:
+                num=0
+                den=0
+                for feat in self.featdict.keys():
+                    if feat in word.featdict.keys():
+                        num+=min(self.featdict[feat],word.featdict[feat])
+                    den+=self.featdict[feat]
+                pre = float(num)/float(den)
+            self.min_precisiondict[word]=pre
+            return pre
+
+    def invCL(self,word):
+        if word in self.invCLdict.keys():
+            return self.invCLdict[word]
+        else:
+            precision = self.min_precision(word)
+            recall = word.min_precision(self)
+            invCLval=math.pow(precision*(1-recall),0.5)
+            self.invCLdict[word]=invCLval
+            return invCLval
+
+
+

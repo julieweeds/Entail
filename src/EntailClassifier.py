@@ -13,6 +13,7 @@ class EntailClassifier:
     randomseed=42   #for cross-validation
     k=1.96 #for 95% confidence interval
     kneighs=1000
+    do_ratio = False #whether to do ratio or difference in CR prediction
 
 
     def __init__(self,pairfilename,freqfilename,use_cache=False):
@@ -304,10 +305,10 @@ class EntailClassifier:
             return self.train0Freq1(split)
         elif method=="lin_freq":
             return self.trainlinfreq(split)
-        elif method=="CR":
+        elif method=="CR" or method=="clarke":
             return self.trainCR(split)
-        elif method=="CR_thresh":
-            return self.trainCRThresh(split)
+        elif method=="CR_thresh" or method=="clarke_thresh" or method=="invCL":
+            return self.trainCRThresh(split,method)
         else:
             print "Error: Unknown method of classification "+method
             exit(1)
@@ -339,13 +340,16 @@ class EntailClassifier:
         return [threshold]
 
     def trainCR(self,split):
-        return [0]
+        if EntailClassifier.do_ratio:
+            return[1]
+        else:
+            return [0]
 
     def train0Freq1(self,split):
         #dummy to return freq threshold of 0
         return [0]
 
-    def trainCRThresh(self,split):
+    def trainCRThresh(self,split,method):
 
         print"Training split "+str(split)
         positives=[]
@@ -354,13 +358,26 @@ class EntailClassifier:
         for [word1,word2,result] in self.pairmatrix[self.cv_idx!=split]:
 
             #diff = float(self.entrydict[word2].freq)-float(self.entrydict[word1].freq)
-            precision = float(self.entrydict[word1].precision(self.entrydict[word2]))
-            recall=float(self.entrydict[word2].precision(self.entrydict[word1]))
+            if method=="CR_thresh":
+                precision = float(self.entrydict[word1].precision(self.entrydict[word2]))
+                recall=float(self.entrydict[word2].precision(self.entrydict[word1]))
+            elif method=="clarke_thresh":
+                precision = float(self.entrydict[word1].min_precision(self.entrydict[word2]))
+                recall=float(self.entrydict[word2].min_precision(self.entrydict[word1]))
+            elif method=="invCL":
+                precision = float(self.entrydict[word1].invCL(self.entrydict[word2]))
+                recall=1 #invCL uses 1-recall anyway so threshold just on precision value
+            else:
+                print "Unknown CR method "+method
+                exit(1)
             if recall == 0:
                 ratio=0
                 #hm=0
             else:
-                ratio=precision-recall
+                if EntailClassifier.do_ratio:
+                    ratio=precision/recall
+                else:
+                    ratio=precision-recall
                 #hm=2*precision*recall/(precision+recall)
             if int(result)==1:
                 positives.append(ratio)
@@ -429,9 +446,8 @@ class EntailClassifier:
         elif method=="lin_freq" or method=="lin_freq_thresh":
             return self.linpredict(word1,word2,args)
             #print "Thresholds ",kthresh,freqthresh
-        elif method=="CR" or method=="CR_thresh":
-            return self.CRpredict(word1,word2,args)
-
+        elif method in ["CR","CR_thresh","clarke","clarke_thresh","invCL"]:
+            return self.CRpredict(word1,word2,args,method)
         else:
             print "Error: Unknown method of classification "+method
             exit(1)
@@ -472,23 +488,38 @@ class EntailClassifier:
             predict=0
         return predict
 
-    def CRpredict(self,word1,word2,args):
+    def CRpredict(self,word1,word2,args,method):
         [threshold]=args
 
-        precision = float(self.entrydict[word1].precision(self.entrydict[word2]))
-        recall=float(self.entrydict[word2].precision(self.entrydict[word1]))
+        if method=="CR" or method=="CR_thresh":
+            precision = float(self.entrydict[word1].precision(self.entrydict[word2]))
+            recall=float(self.entrydict[word2].precision(self.entrydict[word1]))
+        elif method=="clarke" or method=="clarke_thresh":
+            precision = float(self.entrydict[word1].min_precision(self.entrydict[word2]))
+            recall=float(self.entrydict[word2].min_precision(self.entrydict[word1]))
+        elif method=="invCL":
+            precision = float(self.entrydict[word1].invCL(self.entrydict[word2]))
+            recall=1
+        else:
+            print "Unknown CR method "+method
+            exit(1)
         if recall == 0:
             ratio=0
             hm=0
         else:
-            ratio=precision-recall
-            hm=2*precision*recall/(precision+recall)
+            if EntailClassifier.do_ratio:
+                ratio = precision/recall
+            else:
+                ratio=precision-recall
+                hm=2*precision*recall/(precision+recall)
         #print word1,word2,precision,recall,hm,ratio
         if ratio>threshold:
             predict =1
         else:
             predict =0
         return predict
+
+
 
     def svm_train(self,split,method):
         #generate positives and negatives for SVM
@@ -551,7 +582,7 @@ if __name__ == "__main__":
         #print myEntClassifier.entrydict["ambulance"].simdict
         #print myEntClassifier.entrydict["ambulance"].rankdict
 
-    if "CR" in parameters["methods"] or "CR_thresh" in parameters["methods"]:
+    if "CR" in parameters["methods"] or "CR_thresh" in parameters["methods"] or "clarke" in parameters["methods"] or "clarke_thresh" in parameters["methods"] or "invCL" in parameters["methods"]:
         myEntClassifier.loadvectors(parameters["vectorfile"],parameters["use_cache"])
 
 

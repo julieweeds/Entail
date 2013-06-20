@@ -2,6 +2,7 @@ __author__ = 'Julie'
 
 def configure(arguments):
 
+    known_methods=["freq","zero_freq","lin_freq","CR","CR_thresh","clarke","clarke_thresh","invCL"]
     parameters={}
     parameters["on_apollo"]=True
     parameters["local"]=False
@@ -27,18 +28,13 @@ def configure(arguments):
             parameters["on_apollo"]=True
             parameters["at_home"]=False
             parameters["local"]=False
-        elif arg=="zero_freq":
-            parameters["methods"].append("zero_freq")
-        elif arg=="freq":
-            parameters["methods"].append("freq")
-        elif arg=="lin_freq":
-            parameters["methods"].append("lin_freq")
-        elif arg=="CR":
-            parameters["methods"].append("CR")
-        elif arg=="CR_thresh":
-            parameters["methods"].append("CR_thresh")
+        elif arg in known_methods:
+            parameters["methods"].append(arg)
         elif arg=="use_cache":
             parameters["use_cache"]=True
+        else:
+            print "Ignoring argument "+arg
+
 
     parameters=setfiles(parameters)
     return parameters
