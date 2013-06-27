@@ -13,7 +13,7 @@ class EntailClassifier:
     randomseed=42   #for cross-validation
     k=1.96 #for 95% confidence interval
     kneighs=1000
-    do_ratio = False #whether to do ratio or difference in CR prediction
+    do_ratio = True #whether to do ratio or difference in threshold prediction (CR or frequency)
 
 
     def __init__(self,pairfilename,freqfilename,use_cache=False):
@@ -22,11 +22,13 @@ class EntailClassifier:
         self.freqfile=freqfilename
         self.use_cache=use_cache
         self.paircache=True #use cache of pairs
+        self.transformpairs=False #run function to remove negatives and reverse positives
         self.simsfile=""
         self.pairmatrix = "" #will be numpy array which stores triple of w1,w1,1/0
         self.cv_idx= "" #will be index which indicates which split item in self.pairmatrix is in
         self.nopairs=0 #total number of pairs in data
         self.testing=False
+        self.verbose=False
         self.entrydict={} #to store freq info about words
 
         self.readpairs()
@@ -119,6 +121,38 @@ class EntailClassifier:
             with open(self.pairfile+".cached",'w') as outfile:
                 json.dump(self.pairmatrix.tolist(),outfile)
 
+    def transform_pairs(self):
+        #transform dataset to be positives and reversed positives and save to file
+
+        incount=0
+        outcount=0
+        totalcount=0
+        todelete=[]
+        toadd=[]
+        print "Transforming dataset into positives and reversed positives"
+        for i in range(len(self.pairmatrix)):
+            [word1,word2,score]=self.pairmatrix[i]
+            #print word1,word2,score
+            if int(score) == 0:
+                outcount+=1
+                todelete.append(i) #list of indices to delete: current zeroes
+            else:
+                incount+=1
+                toadd.append([word2,word1,0]) #list of new pairs: reversed ones
+            totalcount+=1
+            if totalcount%1000==0:
+                print "Checked "+str(totalcount)+" pairs: in = "+str(incount)+" out = "+str(outcount)
+        print "Checked "+str(totalcount)+" pairs: in = "+str(incount)+" out = "+str(outcount)
+        self.pairmatrix=numpy.delete(self.pairmatrix,todelete,0) #delete zeroes
+        newrows=numpy.array(toadd)
+        self.pairmatrix = numpy.vstack((self.pairmatrix,newrows))
+        self.nopairs=len(self.pairmatrix)
+        print "Size of pairmatrix is now "+str(self.nopairs)
+        print "Writing file "+self.pairfile+".transform"
+        with open(self.pairfile+".transform",'w') as outfile:
+            json.dump(self.pairmatrix.tolist(),outfile)
+
+
     def readtotals(self):
 
         instream=open(self.freqfile,'r')
@@ -140,6 +174,8 @@ class EntailClassifier:
         instream.close()
         if not self.paircache:
             self.filter_pairs()
+        if self.transformpairs:
+            self.transform_pairs()
 
     def loadsims(self,simsfile,use_cache=False,make_cache=True):
         #is there a relevant cache of relevant sims? If so, load
@@ -179,7 +215,7 @@ class EntailClassifier:
                     #print "Ignoring line "+str(linesread)+": "+w1
                     ignored+=1
 
-                if linesread%100==0:
+                if self.verbose and linesread%100==0:
                     print "Read "+str(linesread)+" lines and ignored "+str(ignored)+" lines and stored "+str(added)+" similarities"
                     #break
             print "Read "+str(linesread)+" lines and ignored "+str(ignored)+" lines and stored "+str(added)+" similarities"
@@ -207,7 +243,7 @@ class EntailClassifier:
                 rank=float(fields.pop())
                 added+=self.entrydict[w1].readfromcache(w2,sc,rank)
 
-            if linesread%100==0:
+            if self.verbose and linesread%100==0:
                 print "Read "+str(linesread)+" lines and added "+str(added)+" similarities"
                 #break
         print "Read "+str(linesread)+" lines and added "+str(added)+" similarities"
@@ -256,7 +292,7 @@ class EntailClassifier:
                     w2=fields.pop()
                     sc=float(fields.pop())
                     self.entrydict[w1].addfeature(w2,sc)
-            if linesread%1000==0:
+            if self.verbose and linesread%1000==0:
                 print "Read "+str(linesread)+" lines and written "+str(lineswritten)+" lines"
 
         if make_cache:
@@ -322,7 +358,10 @@ class EntailClassifier:
         for [word1,word2,result] in self.pairmatrix[self.cv_idx!=split]:
             #if word1 in self.entrydict.keys():
             #    if word2 in self.entrydict.keys():
-            diff = float(self.entrydict[word2].freq)-float(self.entrydict[word1].freq)
+            if EntailClassifier.do_ratio:
+                diff = float(self.entrydict[word2].freq)/float(self.entrydict[word1].freq)
+            else:
+                diff = float(self.entrydict[word2].freq)-float(self.entrydict[word1].freq)
                 #else:
                 #    print "Error: no frequency information for "+word2
             #else:
@@ -332,7 +371,7 @@ class EntailClassifier:
             else:
                 negatives.append(diff)
             done+=1
-            if done%1000==0:
+            if self.verbose and done%1000==0:
                 print "Trained on "+str(done)
         print len(positives),len(negatives)
 
@@ -347,7 +386,10 @@ class EntailClassifier:
 
     def train0Freq1(self,split):
         #dummy to return freq threshold of 0
-        return [0]
+        if EntailClassifier.do_ratio:
+            return[1]
+        else:
+            return [0]
 
     def trainCRThresh(self,split,method):
 
@@ -384,7 +426,7 @@ class EntailClassifier:
             else:
                 negatives.append(ratio)
             done+=1
-            if done%1000==0:
+            if self.verbose and done%1000==0:
                 print "Trained on "+str(done)
         print len(positives),len(negatives)
 
@@ -392,8 +434,11 @@ class EntailClassifier:
         return [threshold]
 
     def trainlinfreq(self,split):
-        return [EntailClassifier.kneighs,float("-inf")]
-
+        if EntailClassifier.do_ratio:
+            return [EntailClassifier.kneighs,1]
+        else:
+        #    return [EntailClassifier.kneighs,float("-inf")]
+            return [EntailClassifier.kneighs,0]
     def test1(self,split,method,args):
         #method to test classification method in one split of data
         # method
@@ -430,7 +475,7 @@ class EntailClassifier:
                 else:
                     FN+=1
             total+=1
-            if total%100==0:
+            if self.verbose and total%100==0:
                 print "Completed "+str(total)+" tests"
 
         accuracy = float(correct)/float(total)
@@ -456,7 +501,11 @@ class EntailClassifier:
         (freqthresh,kthresh)=(args[1],args[0])
         rank1=self.entrydict[word1].rankdict[word2]
         rank2=self.entrydict[word2].rankdict[word1]
-        diff = float(self.entrydict[word2].freq)-float(self.entrydict[word1].freq)
+        if EntailClassifier.do_ratio:
+            diff = float(self.entrydict[word2].freq)/float(self.entrydict[word1].freq)
+
+        else:
+            diff = float(self.entrydict[word2].freq)-float(self.entrydict[word1].freq)
 
 
         #    else:
@@ -475,7 +524,10 @@ class EntailClassifier:
 
     def freqpredict(self,word1,word2,args):
         [threshold]=args
-        diff = float(self.entrydict[word2].freq)-float(self.entrydict[word1].freq)
+        if EntailClassifier.do_ratio:
+            diff = float(self.entrydict[word2].freq)/float(self.entrydict[word1].freq)
+        else:
+            diff = float(self.entrydict[word2].freq)-float(self.entrydict[word1].freq)
 
 
         #    else:

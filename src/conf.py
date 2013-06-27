@@ -7,7 +7,7 @@ def configure(arguments):
     parameters["on_apollo"]=True
     parameters["local"]=False
     parameters["at_home"]=False
-    parameters["pairset"]="wn-noun-dependencies.json"
+    parameters["pairset"]="wn-noun-dependencies.transform.json"
     parameters["freqset"]="entries_t10.strings"
     parameters["methods"]=[]
     parameters["use_cache"]=False
@@ -30,6 +30,9 @@ def configure(arguments):
             parameters["local"]=False
         elif arg in known_methods:
             parameters["methods"].append(arg)
+        elif arg == "all":
+            for method in known_methods:
+                parameters["methods"].append(method)
         elif arg=="use_cache":
             parameters["use_cache"]=True
         else:
