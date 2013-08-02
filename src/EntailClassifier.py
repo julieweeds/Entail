@@ -21,7 +21,7 @@ class EntailClassifier:
         self.pairfile=pairfilename
         self.freqfile=freqfilename
         self.use_cache=use_cache
-        self.paircache=True #use cache of pairs
+        self.paircache=False #use cache of pairs
         self.transformpairs=False #run function to remove negatives and reverse positives
         self.simsfile=""
         self.pairmatrix = "" #will be numpy array which stores triple of w1,w1,1/0
@@ -30,6 +30,11 @@ class EntailClassifier:
         self.testing=False
         self.verbose=False
         self.entrydict={} #to store freq info about words
+        if EntailClassifier.do_ratio:
+            self.comparestring="/"
+        else:
+            self.comparestring="-"
+
 
         self.readpairs()
         self.readtotals()
@@ -88,6 +93,8 @@ class EntailClassifier:
             print "Number of zeros is "+str(zeros)
             exit(1)
         print "Validated data:  "+str(self.nopairs)+" pairs"
+        print "Number of ones is "+str(ones)
+        print "Number of zeros is "+str(zeros)
 
     def filter_pairs(self):
         #remove any pairs for which we don't have frequency/corpus information
@@ -116,10 +123,10 @@ class EntailClassifier:
         self.nopairs=len(self.pairmatrix)
         print "Size of pairmatrix is now "+str(self.nopairs)
         #print self.pairmatrix[0]
-        if outcount>0:
-            print "Writing cache "+self.pairfile+".cached"
-            with open(self.pairfile+".cached",'w') as outfile:
-                json.dump(self.pairmatrix.tolist(),outfile)
+
+        print "Writing cache "+self.pairfile+".cached"
+        with open(self.pairfile+".cached",'w') as outfile:
+            json.dump(self.pairmatrix.tolist(),outfile)
 
     def transform_pairs(self):
         #transform dataset to be positives and reversed positives and save to file
@@ -129,6 +136,7 @@ class EntailClassifier:
         totalcount=0
         todelete=[]
         toadd=[]
+        newarray=[]
         print "Transforming dataset into positives and reversed positives"
         for i in range(len(self.pairmatrix)):
             [word1,word2,score]=self.pairmatrix[i]
@@ -136,9 +144,12 @@ class EntailClassifier:
             if int(score) == 0:
                 outcount+=1
                 todelete.append(i) #list of indices to delete: current zeroes
+
             else:
                 incount+=1
                 toadd.append([word2,word1,0]) #list of new pairs: reversed ones
+                newarray.append([word1,word2,1])
+                newarray.append([word2,word1,0])
             totalcount+=1
             if totalcount%1000==0:
                 print "Checked "+str(totalcount)+" pairs: in = "+str(incount)+" out = "+str(outcount)
@@ -150,7 +161,8 @@ class EntailClassifier:
         print "Size of pairmatrix is now "+str(self.nopairs)
         print "Writing file "+self.pairfile+".transform"
         with open(self.pairfile+".transform",'w') as outfile:
-            json.dump(self.pairmatrix.tolist(),outfile)
+            #json.dump(self.pairmatrix.tolist(),outfile)
+            json.dump(newarray,outfile)
 
 
     def readtotals(self):
@@ -341,6 +353,8 @@ class EntailClassifier:
             return self.train0Freq1(split)
         elif method=="lin_freq":
             return self.trainlinfreq(split)
+        elif method=="lin":
+            return self.trainlin(split)
         elif method=="CR" or method=="clarke":
             return self.trainCR(split)
         elif method=="CR_thresh" or method=="clarke_thresh" or method=="invCL":
@@ -439,12 +453,17 @@ class EntailClassifier:
         else:
         #    return [EntailClassifier.kneighs,float("-inf")]
             return [EntailClassifier.kneighs,0]
+
+    def trainlin(self,split):
+        return [EntailClassifier.kneighs,0]
+
     def test1(self,split,method,args):
         #method to test classification method in one split of data
         # method
-        if method=="lin_freq":
+        if method=="lin_freq" or method =="lin":
             (freqthresh,kthresh)=(args[1],args[0])
-            print "Testing thresholds k= "+str(kthresh)+" and freq2-freq1 > "+str(freqthresh)+" on split "+str(split)
+
+            print "Testing thresholds k= "+str(kthresh)+" and freq2"+self.comparestring+"freq1 > "+str(freqthresh)+" on split "+str(split)
         else:
             [threshold]=args
             print "Testing threshold "+str(threshold)+" on split "+str(split)
@@ -488,7 +507,7 @@ class EntailClassifier:
     def predict(self,method,word1,word2,args):
         if method=="freq" or method=="zero_freq":
             return self.freqpredict(word1,word2,args)
-        elif method=="lin_freq" or method=="lin_freq_thresh":
+        elif method=="lin_freq" or method=="lin" or method=="lin_freq_thresh":
             return self.linpredict(word1,word2,args)
             #print "Thresholds ",kthresh,freqthresh
         elif method in ["CR","CR_thresh","clarke","clarke_thresh","invCL"]:
@@ -627,7 +646,7 @@ if __name__ == "__main__":
 
     #myEntClassifier.test1(0,"freq",[0])
 
-    if "lin_freq" in parameters["methods"]:
+    if "lin_freq" in parameters["methods"] or "lin" in parameters["methods"]:
         #need to load up thesaurus similarity file
         #probably want to cache the relevant similarity scores
         myEntClassifier.loadsims(parameters["simsfile"],parameters["use_cache"])

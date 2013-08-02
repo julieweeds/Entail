@@ -2,7 +2,7 @@ __author__ = 'Julie'
 
 def configure(arguments):
 
-    known_methods=["freq","zero_freq","lin_freq","CR","CR_thresh","clarke","clarke_thresh","invCL"]
+    known_methods=["freq","zero_freq","lin_freq","CR","CR_thresh","clarke","clarke_thresh","invCL","lin"]
     parameters={}
     parameters["on_apollo"]=True
     parameters["local"]=False
@@ -35,6 +35,8 @@ def configure(arguments):
                 parameters["methods"].append(method)
         elif arg=="use_cache":
             parameters["use_cache"]=True
+        elif arg=="bless":
+            parameters["pairset"]="BLESS_ent-pairs.json"
         else:
             print "Ignoring argument "+arg
 
